@@ -62,17 +62,16 @@ jobs:
 
       - name: Prepare Release Toolkit Archive
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: powershell
+        shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           $stage = ".\dist\toolkit_pkg"
           New-Item -ItemType Directory -Force -Path "$stage\scripts" | Out-Null
-          Copy-Item ".\dist\RemoteControlUI.exe" "$stage\" -Force
-          Copy-Item ".\dist\RemoteControlLauncher.exe" "$stage\" -Force
-          Copy-Item ".\一键下载与部署.bat" "$stage\" -Force
-          Copy-Item ".\操作手册.txt" "$stage\" -Force
-          Copy-Item ".\LICENSE" "$stage\" -Force
-          Copy-Item ".\scripts\deploy_remote.ps1" "$stage\scripts\" -Force
+          Copy-Item ".\dist\RemoteControlUI.exe" $stage -Force
+          Copy-Item ".\dist\RemoteControlLauncher.exe" $stage -Force
+          Get-ChildItem -Path "." -File | Where-Object { $_.Extension -in ".bat", ".txt" } | Copy-Item -Destination $stage -Force
+          Copy-Item ".\LICENSE" $stage -Force
+          Copy-Item ".\scripts\deploy_remote.ps1" "$stage\scripts" -Force
           Compress-Archive -Path "$stage\*" -DestinationPath ".\dist\Apollo-EasyTier-Remote-Toolkit-$tag.zip" -Force
 
       - name: Publish GitHub Release
