@@ -1,0 +1,26 @@
+# Compiled binaries & build outputs
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+*.zip
+
+# Downloaded installers & Android APKs (fetched dynamically via Option [1] or Releases)
+Downloaded_Files/
+平板APK安装包/
+
+# Runtime & user-specific secrets/configs
+config.toml
+ui_settings.json
+我的配对信息与避坑手册.txt
+我的远程配对信息.txt
+selfcheck/
+test_bin/
+*.log
+
+# Python / IDE caches
+__pycache__/
+*.pyc
+.vs/
+.vscode/

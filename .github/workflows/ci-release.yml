@@ -1,0 +1,86 @@
+name: Build, Test & Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify PowerShell UTF-8 BOM, AST syntax & pure-ASCII BAT launchers
+        shell: pwsh
+        run: |
+          $psIssues = 0
+          Get-ChildItem -Recurse -Filter "*.ps1" | ForEach-Object {
+              $b = [System.IO.File]::ReadAllBytes($_.FullName)
+              $bom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)
+              $t = $null; $e = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$t, [ref]$e) | Out-Null
+              if (-not $bom -or $e.Count -gt 0) {
+                  Write-Error "PS1 check failed: $($_.FullName) BOM=$bom ParseErrors=$($e.Count)"
+                  $psIssues++
+              }
+          }
+          $batIssues = 0
+          Get-ChildItem -Recurse -Filter "*.bat" | ForEach-Object {
+              $b = [System.IO.File]::ReadAllBytes($_.FullName)
+              $nonAscii = ($b | Where-Object { $_ -gt 127 }).Count
+              if ($nonAscii -gt 0) {
+                  Write-Error "BAT non-ASCII bytes found in $($_.FullName): $nonAscii"
+                  $batIssues++
+              }
+          }
+          if ($psIssues -gt 0 -or $batIssues -gt 0) { exit 1 }
+          Write-Host "All .ps1 and .bat files passed encoding & syntax checks."
+
+      - name: Build binaries & run unit tests (.NET 4.8 csc.exe)
+        shell: powershell
+        run: |
+          & .\scripts\build.ps1 -OutputDir ".\dist" -OfflineTests
+
+      - name: Verify binary manifests, QR encoder & zero PII leak
+        shell: powershell
+        run: |
+          python -m pip install --quiet pillow
+          $demoDir = ".\dist\demo_check"
+          & ".\dist\RemoteControlUI_TestHarness.exe" --demo-self-test $demoDir
+          if ($LASTEXITCODE -ne 0) { throw "Demo self-test failed ($LASTEXITCODE)" }
+          python ".\tests\verify_qr_and_binary.py" "$demoDir\pairing_qr.png" ".\dist\RemoteControlUI.exe" ".\dist\RemoteControlLauncher.exe" --demo
+          if ($LASTEXITCODE -ne 0) { throw "Python verification failed ($LASTEXITCODE)" }
+
+      - name: Prepare Release Toolkit Archive
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $stage = ".\dist\toolkit_pkg"
+          New-Item -ItemType Directory -Force -Path "$stage\scripts" | Out-Null
+          Copy-Item ".\dist\RemoteControlUI.exe" "$stage\" -Force
+          Copy-Item ".\dist\RemoteControlLauncher.exe" "$stage\" -Force
+          Copy-Item ".\一键下载与部署.bat" "$stage\" -Force
+          Copy-Item ".\操作手册.txt" "$stage\" -Force
+          Copy-Item ".\LICENSE" "$stage\" -Force
+          Copy-Item ".\scripts\deploy_remote.ps1" "$stage\scripts\" -Force
+          Compress-Archive -Path "$stage\*" -DestinationPath ".\dist\Apollo-EasyTier-Remote-Toolkit-$tag.zip" -Force
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/RemoteControlUI.exe
+            dist/RemoteControlLauncher.exe
+            dist/Apollo-EasyTier-Remote-Toolkit-${{ github.ref_name }}.zip
