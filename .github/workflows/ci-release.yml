@@ -54,9 +54,9 @@ jobs:
         shell: powershell
         run: |
           python -m pip install --quiet pillow
-          $demoDir = ".\dist\demo_check"
-          & ".\dist\RemoteControlUI_TestHarness.exe" --demo-self-test $demoDir
-          if ($LASTEXITCODE -ne 0) { throw "Demo self-test failed ($LASTEXITCODE)" }
+          $demoDir = Join-Path (Get-Location).Path "dist\demo_check"
+          $p = Start-Process -FilePath ".\dist\RemoteControlUI_TestHarness.exe" -ArgumentList "--demo-self-test `"$demoDir`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Demo self-test failed ($($p.ExitCode))" }
           python ".\tests\verify_qr_and_binary.py" "$demoDir\pairing_qr.png" ".\dist\RemoteControlUI.exe" ".\dist\RemoteControlLauncher.exe" --demo
           if ($LASTEXITCODE -ne 0) { throw "Python verification failed ($LASTEXITCODE)" }
 
